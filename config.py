@@ -19,6 +19,7 @@ load_dotenv(ROOT / ".env")
 # ─── The corpus you're working with ──────────────────────────────────────────
 # Change this to switch corpora, or pass --corpus on the command line.
 # Options are the folder names inside corpora/. See corpora/README.md.
+# Chosen corpus for Project 1: campus_life
 
 CORPUS = os.getenv("AI201_CORPUS", "campus_life")
 
