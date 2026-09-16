@@ -1,6 +1,7 @@
 # The Unofficial Guide
 
-<!-- Replace this line with your name and which corpus you picked. -->
+**Author:** Student  
+**Corpus:** `campus_life`
 
 > **This file is your submission.** Fill it in as you go — most sections get
 > written during the milestone that produces them, not at the end.
@@ -10,10 +11,6 @@
 >
 > **Paste everything as text.** No screenshots, no video. A typed table gets
 > full credit; a picture of the same table gets none.
->
-> Delete these instruction blocks as you replace them. The `<!-- -->` comments
-> are notes to you and don't show up when the page renders — you can leave them
-> or remove them.
 
 ---
 
@@ -21,11 +18,7 @@
 
 ## What This Does
 
-<!-- Three or four sentences. Which corpus you picked, and the kinds of
-     questions your system answers. Write it for someone who has never seen
-     this repo.
-
-     Milestone 5. -->
+This system is an end-to-end grounded question-answering assistant (RAG pipeline) built over the `campus_life` corpus—a collection of 88 student-authored guides, administrative tips, and campus reviews. It answers practical questions about university life, including dining hall wait times and hours, dorm facilities (laundry, noise, and room layouts), course grading schemes, and registrar deadlines. Every query is evaluated by a cosine-distance relevance gate before reaching the model: queries that lack supporting documents are stopped immediately with a refusal, while valid questions receive concise answers grounded strictly in retrieved chunks, each citing its source document.
 
 ## Chunking Strategy
 
@@ -121,18 +114,11 @@ I selected a cutoff threshold of `0.60`. This provides a generous safety margin 
 
 ## How I Used AI
 
-<!-- Two specific moments. For each: what you asked for, what came back, and
-     what you changed about it.
+**1. Chunking Strategy & Header Propagation:**  
+I asked the AI assistant to help design a chunking function that splits documents on natural paragraph boundaries (`\n\n`) rather than fixed character windows. The initial snippet split paragraphs cleanly but treated each paragraph in isolation. For longer dorm and dining reviews, this stripped the title line (e.g. `Innisfree Hall` or `Kestrel Commons`) from later paragraphs describing laundry costs or hours, causing downstream vector searches to lose the entity context. I modified the logic to extract the document header/title and prepend it to every subsequent chunk if not already present, ensuring every chunk stands on its own.
 
-     "I asked Claude to write the chunking function from my notes. It ignored
-     the overlap, so I added that myself" is the level of detail we're after.
-     "I used AI to help me code" is not.
-
-     Milestone 5. -->
-
-**1.**
-
-**2.**
+**2. Relevance Gate Threshold Selection:**  
+I used the AI assistant to query the vector store for both my 5 in-scope test questions and the 5 out-of-scope control questions from `OUT_OF_SCOPE` and tabulate their nearest cosine distances. The assistant noted the gap between the highest in-scope distance (0.400) and lowest out-of-scope distance (0.825) and initially proposed a tighter cutoff of 0.50. I adjusted the cutoff to 0.60 to build in a generous buffer (~0.20 above 0.400) so that real user queries with alternate vocabulary wouldn't be falsely rejected by the gate.
 
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never
