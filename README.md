@@ -88,30 +88,36 @@ Best time to do laundry here is Tuesday or Wednesday morning. Sunday after 6pm y
 
 ## Sample Answer
 
-<!-- One complete question and answer, pasted as text, with the source line
-     visible. Milestone 4. -->
-
-**Question:**
+**Question:** How does the housing lottery decide selection order for juniors and seniors?
 
 **Answer:**
 
 ```
+Juniors and seniors are ordered by accumulated credit hours first, with a random tie-break used if needed (*admin_housing_lottery.txt*).
+
+Sources retrieved: admin_housing_lottery.txt, admin_parking_permits.txt, advising_registration.txt, dining_the_atrium_followup.txt, housing_tamsin_court.txt
 ```
 
-**My relevance cutoff:**
+**My relevance cutoff:** `0.60`
 
-<!-- The number you set in config.py, and how you got there.
+To determine the relevance cutoff, I measured the best cosine distance for my five in-scope test questions and the five out-of-scope questions from `OUT_OF_SCOPE`. 
 
-     You ran five questions your corpus covers and the five in OUT_OF_SCOPE
-     that it clearly doesn't, and wrote down the best distance for each. What
-     did those two groups look like? Where was the gap? Put the actual numbers
-     here — the table below wants all ten rows.
+The in-scope distances formed a tight cluster between 0.198 and 0.400 (mean ~0.287). The out-of-scope questions clustered far higher, between 0.825 and 0.934 (mean ~0.877). This creates an unambiguous gap of 0.425 between 0.400 and 0.825.
 
-     Milestone 4. -->
+I selected a cutoff threshold of `0.60`. This provides a generous safety margin (~0.20 above the highest in-scope question) so slight variations in user phrasing will not trigger false refusals, while sitting ~0.225 below the closest out-of-scope question to ensure non-corpus queries are consistently blocked before reaching the generation model.
 
 | Question | In corpus? | Best distance |
 |---|---|---|
-|  |  |  |
+| How does the housing lottery decide selection order for juniors and seniors? | Yes | 0.207 |
+| What are the library hours during reading week compared to normal term? | Yes | 0.400 |
+| What happens if a student drops a course after the second week? | Yes | 0.358 |
+| How long are the wait times at Kestrel Commons during peak lunch between 12:15 and 1:00? | Yes | 0.198 |
+| How can students get the campus bookstore to price match textbook prices? | Yes | 0.272 |
+| What is the capital of Mongolia? | No | 0.825 |
+| How do I change the oil in a diesel engine? | No | 0.934 |
+| Who won the 1994 World Cup? | No | 0.886 |
+| What is the recommended dosage of ibuprofen for a headache? | No | 0.844 |
+| How do I write a for loop in Rust? | No | 0.896 |
 
 ## How I Used AI
 
