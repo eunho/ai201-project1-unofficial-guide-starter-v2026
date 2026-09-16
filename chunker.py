@@ -80,24 +80,103 @@ def fallback_split(
     return chunks
 
 
-def split_documents(documents: list[Document]) -> list[Chunk]:
+import re
+
+
+def split_documents(
+    documents: list[Document],
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    Split documents into chunks based on paragraph and sentence structure.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
-
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
-
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    Tuned for campus_life (~317 characters/post):
+    - Respects natural paragraph breaks (\n\n) and sentence boundaries.
+    - Preserves document title on split chunks so each chunk is self-contained.
+    - Prevents arbitrary character slicing mid-word or mid-sentence.
+    - Avoids creating fragments.
     """
-    return fallback_split(documents)
+    chunk_size = chunk_size or config.CHUNK_SIZE
+    overlap = overlap or config.CHUNK_OVERLAP
+
+    chunks: list[Chunk] = []
+
+    for doc in documents:
+        text = doc.text.strip()
+        if not text:
+            continue
+
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        title = lines[0] if lines else ""
+
+        # For documents within chunk_size, keep as a single intact chunk
+        if len(text) <= chunk_size:
+            chunks.append(
+                Chunk(
+                    text=text,
+                    source=doc.source,
+                    index=0,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+            continue
+
+        # Split into paragraph sections
+        raw_paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        paras = raw_paras[1:] if (len(raw_paras) > 1 and raw_paras[0] == title) else raw_paras
+
+        # Break any individual paragraph larger than chunk_size into sentence units
+        units: list[str] = []
+        for p in paras:
+            if len(p) > chunk_size:
+                sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", p) if s.strip()]
+                units.extend(sentences)
+            else:
+                units.append(p)
+
+        doc_chunks: list[str] = []
+        current_parts: list[str] = []
+        current_len = 0
+
+        for unit in units:
+            unit_len = len(unit)
+            title_header = f"{title}\n\n" if title and not unit.startswith(title) else ""
+            needed = unit_len + (2 if current_parts else len(title_header))
+
+            if current_parts and (current_len + needed > chunk_size):
+                chunk_body = "\n\n".join(current_parts)
+                final_text = f"{title}\n\n{chunk_body}" if title and not chunk_body.startswith(title) else chunk_body
+                doc_chunks.append(final_text.strip())
+
+                # Overlap: keep last unit if within overlap budget
+                last_unit = current_parts[-1]
+                if len(last_unit) <= overlap:
+                    current_parts = [last_unit, unit]
+                    current_len = len(last_unit) + 2 + unit_len
+                else:
+                    current_parts = [unit]
+                    current_len = unit_len
+            else:
+                current_parts.append(unit)
+                current_len += unit_len + (2 if len(current_parts) > 1 else 0)
+
+        if current_parts:
+            chunk_body = "\n\n".join(current_parts)
+            final_text = f"{title}\n\n{chunk_body}" if title and not chunk_body.startswith(title) else chunk_body
+            doc_chunks.append(final_text.strip())
+
+        for idx, c_text in enumerate(doc_chunks):
+            chunks.append(
+                Chunk(
+                    text=c_text,
+                    source=doc.source,
+                    index=idx,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:

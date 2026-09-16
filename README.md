@@ -29,53 +29,61 @@
 
 ## Chunking Strategy
 
-**Chunk size:**
-**Overlap:**
+**Chunk size:** 400 characters  
+**Overlap:** 80 characters  
 
-<!-- What about YOUR documents made you pick these numbers? Short posts and
-     long sectioned guides don't want the same chunking, and "800 seemed
-     reasonable" earns nothing. Point at something you noticed when you read
-     the documents in Milestone 1.
+The `campus_life` corpus consists of 88 short student-written documents averaging approximately 317 characters (ranging from 178 to 554 characters). The starter's baseline fixed-window chunker used 800 characters with 120 character overlap, which left all 88 documents un-split as single chunks. However, arbitrarily chopping at character boundaries on multi-topic posts causes severed sentences and strips crucial context (such as the document title naming the dining hall or residence hall).
 
-     If you changed your mind partway through, say so and say why. That's worth
-     more than pretending you got it right first time.
-
-     Milestone 3. -->
+I set the chunk size to 400 characters with 80 characters of overlap and replaced the chunking logic with a paragraph- and sentence-boundary aware strategy (`chunker.py::split_documents`). Single-topic posts under 400 characters remain intact as cohesive standalone chunks (~70% of the corpus). For longer documents that cover multiple distinct facets (e.g., room layout, laundry fees, and noise ratings), the chunker splits along paragraph breaks and sentences, prepending the document title to each subsequent chunk. This ensures that every chunk remains an independently answerable, complete thought.
 
 ## Sample Chunks
 
-<!-- Five chunks, pasted as text. Label each one and name the file it came from
-     AND the function that produced it — the grader checks your code against
-     what you claim here.
-
-     `python app.py chunks -n 5` prints all three for you. Copy them straight
-     across.
-
-     Milestone 3. -->
-
-**Chunk 1** — source: `` — produced by: ``
+**Chunk 1** — source: `admin_add_drop_deadline.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+On the add/drop deadline
+
+You can add a course through the end of the second week. Dropping is a longer window — through the end of week six — but a drop after week two shows as a W on your transcript. Nothing anywhere on the registrar's site says this plainly, and students find out from each other.
 ```
 
-**Chunk 2** — source: `` — produced by: ``
+**Chunk 2** — source: `course_biol_160_exams.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+BIOL 160 Cell Biology — assessment
+
+Four unit tests and a cumulative final. Not curved.
+
+The unit tests come fast, roughly every three weeks; falling behind once is very hard to recover from.
 ```
 
-**Chunk 3** — source: `` — produced by: ``
+**Chunk 3** — source: `course_math_220.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+MATH 220 Linear Algebra
+
+I lived here my sophomore year. Format is chalk-and-talk lecture, weekly problem sets marked for correctness. Assessment: two midterms and a cumulative final. Curved to a b- median.
+
+Expect 6 to 8 hours a week, almost all of it on problem sets.
+
+The one piece of advice: the problem sets are the course; the lectures make sense afterwards rather than during.
 ```
 
-**Chunk 4** — source: `` — produced by: ``
+**Chunk 4** — source: `dining_the_atrium.txt#1` — produced by: `chunker.py::split_documents`
 
 ```
+The Atrium
+
+Hours are 8:00am to 6:00pm weekdays. Costs one meal swipe for a sandwich-plus-drink combination, or à la carte.
 ```
 
-**Chunk 5** — source: `` — produced by: ``
+**Chunk 5** — source: `housing_innisfree_hall_laundry.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+Laundry in Innisfree Hall
+
+Machines take $1.75 wash, $1.75 dry, app-based. There are eight washers and six dryers for the building, which is the wrong ratio and means the dryers back up on Sunday evenings.
+
+Best time to do laundry here is Tuesday or Wednesday morning. Sunday after 6pm you will wait.
 ```
 
 ## Sample Answer
