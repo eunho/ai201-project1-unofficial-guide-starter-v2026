@@ -135,27 +135,87 @@ I used the AI assistant to query the vector store for both my 5 in-scope test qu
 
 ## Run Log — Before
 
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
-
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
-
-     Milestone 1. -->
+- Produced by: `run_eval.py::main`
+- Run log evidence file: `results/run_2026-09-23_1625_before.md`
+- Retrieval: `store.py::search`, chunks from `chunker.py::split_documents`
+- Corpus: `campus_life` (index variant `default`)
+- top-k: 5 · relevance cutoff: 0.60
+- Runs per question: 3, caching off
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Standalone chunk integrity | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 5. Ground-truth source attribution accuracy | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
 
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
+### Real output from Run 1
+
+#### Criterion 1, 2, & 5: Generated Answers and Source Attribution
+Produced by `generate.py::answer_from_chunks` via `run_eval.py::run_once`:
+
+- **Question 1:** "How does the housing lottery decide selection order for juniors and seniors?"  
+  *Best distance:* 0.2073 (passed gate)  
+  *Sources retrieved:* `admin_housing_lottery.txt`, `admin_parking_permits.txt`, `advising_registration.txt`, `dining_the_atrium_followup.txt`, `housing_tamsin_court.txt`  
+  ```
+  Juniors and seniors are ordered by accumulated credit hours first, with random tie-breaking used only when there is a tie. 
+
+  Source: admin_housing_lottery.txt
+  ```
+
+- **Question 2:** "What are the library hours during reading week compared to normal term?"  
+  *Best distance:* 0.4002 (passed gate)  
+  *Sources retrieved:* `course_hist_118_workload.txt`, `housing_morrow_house_noise.txt`, `money_jobs.txt`, `money_textbooks.txt`, `study_library_hours.txt`  
+  ```
+  During reading week, the library is open until 10pm, whereas it is open until 2am during term. 
+
+  Source: study_library_hours.txt
+  ```
+
+- **Question 3:** "What happens if a student drops a course after the second week?"  
+  *Best distance:* 0.3576 (passed gate)  
+  *Sources retrieved:* `admin_add_drop_deadline.txt`, `admin_grade_appeals.txt`, `admin_pass_fail_option.txt`, `admin_wifi_and_accounts.txt`, `admin_withdrawal_deadline.txt`  
+  ```
+  If a student drops a course after the second week, it shows as a "W" on their transcript (admin_add_drop_deadline.txt).
+  ```
+
+- **Question 4:** "How long are the wait times at Kestrel Commons during peak lunch between 12:15 and 1:00?"  
+  *Best distance:* 0.1982 (passed gate)  
+  *Sources retrieved:* `dining_halden_hall_followup.txt`, `dining_kestrel_commons.txt`, `dining_kestrel_commons_followup.txt`, `dining_pellew_dining_hall_followup.txt`, `dining_the_ridgeway_cafe_followup.txt`  
+  ```
+  The wait times at Kestrel Commons are 20 to 25 minutes between 12:15 and 1:00. This information comes from the documents `dining_kestrel_commons.txt` and `dining_kestrel_commons_followup.txt`.
+  ```
+
+- **Question 5:** "How can students get the campus bookstore to price match textbook prices?"  
+  *Best distance:* 0.2719 (passed gate)  
+  *Sources retrieved:* `admin_library_holds.txt`, `admin_printing_quota.txt`, `course_econ_101.txt`, `money_textbooks.txt`, `study_group_rooms.txt`  
+  ```
+  To get the campus store to price-match, students must ask at the counter and show the other listing on their phone (money_textbooks.txt).
+  ```
+
+#### Criterion 3: Relevance Gate on Out-of-Scope Questions
+Produced by `run_eval.py::check_out_of_scope` (calling `gate.py::check` with cutoff `0.60`):
+
+| Out-of-scope question | Best distance | Gate decision |
+|---|---|---|
+| What is the capital of Mongolia? | 0.825 | refused |
+| How do I change the oil in a diesel engine? | 0.934 | refused |
+| Who won the 1994 World Cup? | 0.886 | refused |
+| What is the recommended dosage of ibuprofen for a headache? | 0.844 | refused |
+| How do I write a for loop in Rust? | 0.896 | refused |
+
+*Gate outcome:* Refused 5 of 5 out-of-scope questions.
+
+#### Criterion 4: Standalone Chunk Integrity
+Sample top-1 retrieved chunk produced by `store.py::search` (chunked by `chunker.py::split_documents`), verifying complete thought and boundary preservation:
+
+*Source:* `admin_housing_lottery.txt#0`
+```
+On the housing lottery
+
+The housing lottery is not random in the way most people assume. Rising sophomores get a number drawn at random, but juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly. That means a senior who took summer courses reliably beats a senior who didn't. Numbers come out the second week of March and selection runs over four evenings.
+```
 
 ## Verdicts
 
