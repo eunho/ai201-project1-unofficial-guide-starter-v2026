@@ -229,23 +229,29 @@ The housing lottery is not random in the way most people assume. Rising sophomor
 
 ## Diagnoses
 
-<!-- For each miss: which stage caused it, and how. The stage alone isn't
-     enough — you need the mechanism.
+### Target Assessment & Latent Failures
 
-     Not a diagnosis: "Question 3 didn't work."
-     A diagnosis:     "Question 3 asks about laundry costs. The answer is in
-                       one sentence that got split across two chunks, so
-                       neither chunk on its own contains it."
+All five criteria were MET across the three evaluation runs. However, as the rubric emphasizes, clearing every criterion on the initial run does not signify that the system is optimal; rather, it reveals that the targets were set conservatively (e.g., accepting 4 of 5 for retrieval and checking presence anywhere across top-5 results). A deeper investigation into the raw distances, chunk rankings, and retrieved distractors reveals significant latent vulnerabilities across the pipeline stages:
 
-     The five stages: loading → chunking → embedding → retrieval → generation.
+1. **Loading:** No failure observed. The 88 plain-text documents load cleanly with intact ASCII/UTF-8 character encodings.
+2. **Chunking:** The custom boundary-aware chunker (`split_documents`) successfully prevented mid-sentence truncations and propagated document title headers. However, because chunks are capped at 400 characters, closely related sentences within multi-paragraph posts occasionally sit in separate chunks.
+3. **Embedding:** Latent weakness identified. The dense embedder (`all-MiniLM-L6-v2`) creates dense vector representations based on general semantic affinity. While effective at high-level topic grouping, it struggles with distinct entities within the same domain (e.g., confusing specific residence halls or dining halls).
+4. **Retrieval (Primary Weakness — Semantic Drift & Distractor Intrusion):**
+   - **Question 1 ("housing lottery selection order"):** Although `admin_housing_lottery.txt` ranked #1 with distance 0.2073, the remaining 4 retrieved chunks had distances of 0.6592, 0.7302, 0.7420, and 0.7646 (e.g., `admin_parking_permits.txt`). Because the relevance gate in `gate.py` evaluates only the minimum distance (`0.2073 < 0.60`), all four high-distance distractor chunks were injected into the LLM prompt.
+   - **Question 2 ("library hours during reading week"):** `study_library_hours.txt` scored distance 0.4002, while distractor `housing_morrow_house_noise.txt` scored 0.4501. The margin between the correct document and an unrelated dorm noise post was only 0.0499 because vector search latched onto generic terms ("library", "hours", "term") and failed to weight the key lexical term "reading week".
+   - **Question 4 ("wait times at Kestrel Commons"):** Dense retrieval pulled three competing dining halls (`dining_the_ridgeway_cafe_followup.txt`, `dining_halden_hall_followup.txt`, `dining_pellew_dining_hall_followup.txt`) into the top 5 because semantic search treats dining hall discussions as interchangeable, lacking exact entity matching for "Kestrel Commons".
+5. **Generation:** Generation succeeded across all runs because Gemini 3.5 Flash Lite adhered strictly to `GROUNDING_INSTRUCTION` and ignored the irrelevant distractor chunks. However, relying on the generation stage to filter out retrieval noise adds token latency, increases cost, and risks hallucinations if distractor text contains conflicting numbers.
 
-     Look for a pattern. If three misses all ask about numbers, that's one
-     problem, not three.
+### Common Pattern
 
-     Missed nothing? Say so, then say honestly whether your targets were set
-     low, and which one you'd tighten and to what.
+The central pattern across these observations is **Pure Dense Semantic Drift**: semantic similarity search matches thematic vibes rather than exact lexical keys. When a user asks about a specific dining hall ("Kestrel Commons") or specific event ("reading week"), dense embeddings alone float multiple adjacent corpus documents to the surface.
 
-     Milestone 3. -->
+### Which Criterion I Would Tighten
+
+I would tighten **Criterion 1**:
+- *Original Target:* "For at least 4 of 5 test questions, the retrieved chunks include one that contains the answer."
+- *Tightened Target:* "For 5 of 5 test questions, the ground-truth document is retrieved at rank 1, and no retrieved chunk in the context window exceeds a distance of 0.60."
+- *Why:* Under this tightened standard, the current vector-only retrieval fails on Question 1 (where 4 of 5 retrieved chunks exceed 0.65 distance) and is precariously close to failure on Question 2 and Question 4.
 
 ## The Improvement
 
