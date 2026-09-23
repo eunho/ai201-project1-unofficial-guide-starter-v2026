@@ -120,6 +120,9 @@ I asked the AI assistant to help design a chunking function that splits document
 **2. Relevance Gate Threshold Selection:**  
 I used the AI assistant to query the vector store for both my 5 in-scope test questions and the 5 out-of-scope control questions from `OUT_OF_SCOPE` and tabulate their nearest cosine distances. The assistant noted the gap between the highest in-scope distance (0.400) and lowest out-of-scope distance (0.825) and initially proposed a tighter cutoff of 0.50. I adjusted the cutoff to 0.60 to build in a generous buffer (~0.20 above 0.400) so that real user queries with alternate vocabulary wouldn't be falsely rejected by the gate.
 
+**3. Pipeline Failure Diagnosis & Hybrid Search Pairing:**  
+In Unit 2, I used the AI assistant to inspect the exact distance margins and rank positions across all candidate chunks for the five test questions. The assistant highlighted a critical vulnerability: pure dense vector search exhibited semantic drift on named entities (pulling three distractor dining halls on Question 4) and specialized phrases (a razor-thin 0.049 margin between the library hours document and a dorm noise post on Question 2). I collaborated with the AI to implement Hybrid Search (`store.py::search`), combining Chroma dense vector search with `rank_bm25.BM25Okapi` via Reciprocal Rank Fusion (RRF) while preserving cosine distance calibration for the relevance gate.
+
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never
      claims earns nothing.
@@ -256,47 +259,49 @@ I would tighten **Criterion 1**:
 ## The Improvement
 
 **What I changed:**
+I implemented Hybrid Search in `store.py::search` by integrating BM25 keyword search (`rank_bm25.BM25Okapi`) alongside Chroma dense vector similarity search, combining candidate rankings using Reciprocal Rank Fusion (RRF with standard constant $k=60$). The underlying cosine distances are preserved on the returned `Result` objects so that the relevance gate in `gate.py` remains calibrated.
 
 **Why I picked it:**
-
-<!-- Connect it to a specific diagnosis above in one sentence. If you can't,
-     you picked a fix because it sounded impressive. -->
+My Milestone 3 diagnosis revealed that pure dense embeddings suffered from semantic drift on specific named entities (retrieving three wrong dining halls when asking about "Kestrel Commons") and specialized phrases (retrieving dorm noise posts when asking about "reading week library hours"); adding BM25 keyword search directly anchors exact terms and entity names alongside semantic meaning.
 
 ### Run Log — After
 
-<!-- Same format, same five criteria, three runs each.
-     `python run_eval.py --label after` -->
+- Produced by: `run_eval.py::main`
+- Run log evidence file: `results/run_2026-09-23_1629_after.md`
+- Retrieval: `store.py::search` (Hybrid Search: Chroma + BM25Okapi via RRF)
+- Corpus: `campus_life` (index variant `default`)
+- top-k: 5 · relevance cutoff: 0.60
+- Runs per question: 3, caching off
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Standalone chunk integrity | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 5. Ground-truth source attribution accuracy | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
 
 **Did it help?**
 
-<!-- Say plainly whether it did, and how you know. If it made things worse,
-     say that — a change that backfired, honestly reported, earns full credit
-     and is more interesting than one that worked. What matters is that you can
-     tell.
-
-     Milestone 4. -->
+Yes, hybrid search markedly improved retrieval precision and context quality across several key dimensions:
+1. **Entity-Specific Precision:** On Question 4 ("How long are the wait times at Kestrel Commons during peak lunch between 12:15 and 1:00?"), pure dense search retrieved three other distractor dining halls (`dining_halden_hall_followup.txt`, `dining_pellew_dining_hall_followup.txt`, `dining_the_ridgeway_cafe_followup.txt`). Hybrid search locked both relevant Kestrel Commons documents (`dining_kestrel_commons_followup.txt` and `dining_kestrel_commons.txt`) at ranks 1 and 2, completely eliminating `dining_halden_hall_followup.txt` from the context.
+2. **Lexical Disambiguation:** On Question 2 ("library hours during reading week"), BM25 heavily promoted `study_library_hours.txt` to rank 1 over the dorm noise distractor (`housing_morrow_house_noise.txt`), cementing the target document as the definitive primary source.
+3. **Noisy Bureaucratic Filtering:** On Question 5 ("bookstore price match"), dense retrieval had pulled completely unrelated administrative chunks (`admin_printing_quota.txt` and `admin_library_holds.txt`). Hybrid search replaced those noisy distractors with `money_textbooks.txt` (#1) and related financial document `money_jobs.txt` (#2).
+4. **Safety Preservation:** The relevance gate remained robust—all five out-of-scope queries were refused (best distances between 0.825 and 0.934), proving hybrid search did not introduce false passes for out-of-domain questions.
 
 ## What's Still Broken
 
-<!-- For each criterion still missed after your fix: what you'd do about it,
-     and why you stopped where you did.
+1. **Distractor Chunk Propagation in Top-K Context Window:**
+   - *Issue:* Even though hybrid search successfully positioned the correct documents at rank 1 and 2, lower ranks (3–5) in fixed top-k=5 retrieval still pull in loosely related passages when a query is narrow. For example, for Question 1, ranks 3–5 still contain distant residence hall documents (`housing_old_brewhouse.txt`, `housing_tamsin_court.txt`).
+   - *Next Step:* Implement an individual chunk cutoff filter after retrieval (e.g., dropping any chunk whose distance exceeds `0.60` before building the generation prompt, rather than only checking the minimum distance across the batch).
+   - *Why I stopped:* Milestone 4 mandates implementing exactly one improvement to cleanly isolate its effects. Hybrid search directly addressed the core diagnosis (lexical entity drift); adding dynamic prompt filtering concurrently would confound the evaluation results.
 
-     "I ran out of time" is fine if it's true. Pretending nothing is left is
-     not.
-
-     Milestone 5. -->
+2. **Potential Lexical Collisions on Non-Corpus Queries:**
+   - *Issue:* If an out-of-scope query contains common campus terms (e.g., "How do I change the oil in the campus shuttle?"), BM25 might assign a high keyword score to `transit_shuttle.txt`. While the dense distance gate currently protects the pipeline, a pure hybrid ranking without a minimum semantic threshold check could elevate irrelevant text.
+   - *Next Step:* Require both dense distance < 0.60 and non-zero BM25 score for queries in borderline distance regimes (0.50–0.60).
 
 ## What I'd Do Differently
 
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
-
-     Milestone 5. -->
+Knowing what I know now, I would write two of the five criteria differently in future units:
+1. **Criterion 1 (Retrieved chunks contain the answer):** Instead of "For at least 4 of 5 test questions, the retrieved chunks include one that contains the answer" (which allows any hit in top-5 to count as success), I would measure **Top-1 Retrieval Accuracy or Mean Reciprocal Rank (MRR)**: *"For 5 of 5 questions, the ground-truth document must be retrieved at rank 1."* The top-5 target masked how precariously close distractors were to supplanting the ground-truth document under dense search.
+2. **Criterion 4 (Standalone chunk integrity):** The initial formulation ("At least 4 of 5 sampled chunks contain a complete, standalone thought") was decoupled from the repeated query evaluation loop. I would redefine this criterion as **Prompt Context Cleanliness**: *"For all test questions, at least 80% of retrieved chunks injected into the model prompt have a relevance distance under 0.55."* This directly measures context purity rather than passive chunk syntax.

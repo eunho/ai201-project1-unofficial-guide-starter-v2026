@@ -148,6 +148,7 @@ def build_index(
     and starting over.
     """
     name = config.collection_name(corpus, variant)
+    _bm25_cache.pop(name, None)
     client = _client()
 
     try:
@@ -178,6 +179,27 @@ def build_index(
     return len(chunks)
 
 
+_bm25_cache: dict[str, tuple[object, list[str], list[dict], list[str]]] = {}
+
+
+def _get_bm25_index(collection, name: str):
+    """Build and cache a BM25Okapi index over collection documents."""
+    if name in _bm25_cache:
+        return _bm25_cache[name]
+    from rank_bm25 import BM25Okapi
+    import re
+
+    data = collection.get()
+    docs = data.get("documents", [])
+    metas = data.get("metadatas", [])
+    ids = data.get("ids", [])
+
+    tokenized_corpus = [re.findall(r"\w+", doc.lower()) for doc in docs]
+    bm25 = BM25Okapi(tokenized_corpus)
+    _bm25_cache[name] = (bm25, docs, metas, ids)
+    return _bm25_cache[name]
+
+
 def search(
     question: str,
     top_k: int | None = None,
@@ -185,10 +207,13 @@ def search(
     variant: str = "default",
 ) -> list[Result]:
     """
-    Retrieve the chunks closest in meaning to a question.
+    Retrieve the chunks closest in relevance to a question using hybrid search.
 
-    Returns them nearest-first, each with its distance.
+    Combines dense semantic search (Chroma / cosine distance) with sparse keyword
+    search (BM25 Okapi) using Reciprocal Rank Fusion (RRF).
     """
+    import re
+
     top_k = top_k or config.TOP_K
     name = config.collection_name(corpus, variant)
 
@@ -199,22 +224,99 @@ def search(
             f"No index called '{name}'. Run `python app.py index` first."
         ) from exc
 
+    total_count = collection.count()
+    if total_count == 0:
+        return []
+
+    # 1. Dense retrieval via Chroma
+    dense_fetch_k = min(max(top_k * 3, 20), total_count)
     raw = collection.query(
         query_embeddings=embed([question]),
-        n_results=min(top_k, collection.count()),
+        n_results=dense_fetch_k,
     )
 
-    results: list[Result] = []
-    for text, meta, distance in zip(
-        raw["documents"][0], raw["metadatas"][0], raw["distances"][0]
+    dense_candidates: dict[str, dict] = {}
+    for rank, (text, meta, distance) in enumerate(
+        zip(raw["documents"][0], raw["metadatas"][0], raw["distances"][0])
     ):
+        label = f"{meta.get('source', 'unknown')}#{meta.get('index', 0)}"
+        dense_candidates[label] = {
+            "rank": rank + 1,
+            "text": text,
+            "source": str(meta.get("source", "unknown")),
+            "distance": float(distance),
+            "produced_by": str(meta.get("produced_by", "unknown")),
+        }
+
+    # 2. Sparse retrieval via BM25 Okapi
+    bm25, docs, metas, ids = _get_bm25_index(collection, name)
+    q_tokens = re.findall(r"\w+", question.lower())
+    bm25_scores = bm25.get_scores(q_tokens) if q_tokens else [0.0] * len(docs)
+    bm25_top_indices = sorted(
+        range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True
+    )[:dense_fetch_k]
+
+    bm25_candidates: dict[str, dict] = {}
+    all_labels = set(dense_candidates.keys())
+
+    for rank, idx in enumerate(bm25_top_indices):
+        if bm25_scores[idx] <= 0:
+            continue
+        label = ids[idx]
+        all_labels.add(label)
+        meta = metas[idx]
+        bm25_candidates[label] = {
+            "rank": rank + 1,
+            "text": docs[idx],
+            "source": str(meta.get("source", "unknown")),
+            "produced_by": str(meta.get("produced_by", "unknown")),
+        }
+
+    # 3. Reciprocal Rank Fusion (RRF)
+    rrf_list = []
+    for label in all_labels:
+        rrf_score = 0.0
+        dist = 1.0
+        text = ""
+        source = "unknown"
+        produced_by = "unknown"
+
+        if label in dense_candidates:
+            rrf_score += 1.0 / (60 + dense_candidates[label]["rank"])
+            dist = dense_candidates[label]["distance"]
+            text = dense_candidates[label]["text"]
+            source = dense_candidates[label]["source"]
+            produced_by = dense_candidates[label]["produced_by"]
+
+        if label in bm25_candidates:
+            rrf_score += 1.0 / (60 + bm25_candidates[label]["rank"])
+            if not text:
+                text = bm25_candidates[label]["text"]
+                source = bm25_candidates[label]["source"]
+                produced_by = bm25_candidates[label]["produced_by"]
+
+        rrf_list.append(
+            {
+                "label": label,
+                "rrf_score": rrf_score,
+                "distance": dist,
+                "text": text,
+                "source": source,
+                "produced_by": produced_by,
+            }
+        )
+
+    rrf_list.sort(key=lambda item: item["rrf_score"], reverse=True)
+
+    results: list[Result] = []
+    for item in rrf_list[:top_k]:
         results.append(
             Result(
-                text=text,
-                source=str(meta.get("source", "unknown")),
-                label=f"{meta.get('source', 'unknown')}#{meta.get('index', 0)}",
-                distance=float(distance),
-                produced_by=str(meta.get("produced_by", "unknown")),
+                text=item["text"],
+                source=item["source"],
+                label=item["label"],
+                distance=item["distance"],
+                produced_by=item["produced_by"],
             )
         )
     return results
