@@ -79,7 +79,7 @@ def _sentence_transformer(name: str):
     default install has — which is the whole point of the default install.
     """
     try:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped, import-not-found]
     except ImportError as exc:
         raise RuntimeError(
             f"config.EMBEDDING_MODEL is set to {name!r}, which isn't the model "
