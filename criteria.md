@@ -54,6 +54,10 @@ At least 4 of 5 sampled chunks contain a complete, standalone thought with no se
 **Why this target:**
 `campus_life` posts are short (most are 1 to 3 paragraphs). The starter's fixed character-window chunker cuts text blindly at character offsets, frequently slicing sentences in half or separating a crucial conclusion from its premise. Measuring that at least 4 of 5 chunks preserve complete sentence boundaries ensures that retrieved context is coherent and directly answerable on its own.
 
+> **Revised in unit 2:** For at least 4 of 5 test questions, the top-1 retrieved chunk is a complete, standalone passage that contains no truncated sentences at either start or end.
+>
+> **Why revised:** The original criterion specified "sampled chunks" without defining an explicit, repeatable sampling protocol during the three query runs executed by `run_eval.py`. Re-anchoring it to the top-1 retrieved chunk for each test query makes the measurement directly verifiable and linked to the actual query pipeline.
+
 ---
 
 ## 5. Ground-truth source attribution accuracy

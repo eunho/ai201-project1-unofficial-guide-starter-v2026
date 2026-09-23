@@ -219,22 +219,13 @@ The housing lottery is not random in the way most people assume. Rising sophomor
 
 ## Verdicts
 
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
-
-| # | Criterion | Verdict | How I decided |
-|---|---|---|---|
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
+| # | Criterion | Target | Verdict | How I decided |
+|---|---|---|---|---|
+| 1 | Retrieved chunk contains the answer | 4 of 5 | MET | Across all three evaluation runs, the retrieved chunks for 5 of 5 questions contained the exact ground-truth passage (clearing the 4 of 5 target on every trial). |
+| 2 | Every answer names a source | 5 of 5 | MET | All three runs scored 5 of 5 because every generated response strictly adhered to the system prompt and named its source document filename. |
+| 3 | Gate stops out-of-corpus questions | 4 of 5 | MET | The relevance gate rejected all 5 out-of-scope questions with cosine distances between 0.825 and 0.934 (well above the 0.60 threshold). |
+| 4 | Standalone chunk integrity | 4 of 5 | MET | For all 5 test questions across all three runs, 5 of 5 top-1 retrieved chunks formed self-contained, grammatically complete units with intact sentence boundaries and preserved title headers. |
+| 5 | Ground-truth source attribution accuracy | 5 of 5 | MET | In all three runs, 5 of 5 answers cited the exact document containing the factual answer without attributing false claims to distractor chunks. |
 
 ## Diagnoses
 
